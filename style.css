@@ -1,0 +1,159 @@
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    overflow: hidden; /* Prevent body scrolling, brain board will handle its own */
+    background-color: #121212;
+    color: #e0e0e0;
+}
+
+#app {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+}
+
+/* Top Bar - Create Tools */
+#top-bar {
+    height: 60px;
+    background: #1e1e1e;
+    border-bottom: 1px solid #333;
+    display: flex;
+    align-items: center;
+    padding: 0 20px;
+    gap: 15px;
+    z-index: 10;
+}
+
+#top-bar button {
+    background: #4caf50;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    padding: 10px 16px;
+    font-size: 14px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+#top-bar button:hover {
+    background: #45a049;
+}
+
+#main-container {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+}
+
+/* Left Bar - Interactive Tools */
+#left-bar {
+    width: 60px;
+    background: #1e1e1e;
+    border-right: 1px solid #333;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding-top: 20px;
+    gap: 15px;
+    z-index: 10;
+}
+
+.tool-btn {
+    background: transparent;
+    border: 1px solid transparent;
+    color: #aaa;
+    border-radius: 8px;
+    width: 40px;
+    height: 40px;
+    font-size: 20px;
+    cursor: pointer;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    transition: all 0.2s;
+}
+
+.tool-btn:hover {
+    background: #333;
+    color: white;
+}
+
+.tool-btn.active {
+    background: #333;
+    color: #4caf50;
+    border-color: #4caf50;
+}
+
+/* Brain Board - Main Workspace */
+#brain-board {
+    flex: 1;
+    background: #1a1a1a;
+    position: relative;
+    overflow: auto; /* Allow scrolling if notes go out of bounds */
+    background-image: radial-gradient(#333 1px, transparent 1px);
+    background-size: 30px 30px; /* Dot grid pattern */
+}
+
+#string-canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none; /* Let clicks pass through to notes/board */
+}
+
+/* Note Boxes */
+.note-box {
+    position: absolute;
+    width: 250px;
+    min-height: 150px;
+    background: #2d2d2d;
+    border: 1px solid #444;
+    border-radius: 8px;
+    box-shadow: 0 8px 16px rgba(0,0,0,0.5);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    transition: border-color 0.2s;
+}
+
+.note-box.selected {
+    border-color: #4caf50;
+    z-index: 100;
+}
+
+.note-header {
+    background: #333;
+    height: 30px;
+    cursor: grab;
+    display: flex;
+    align-items: center;
+    padding: 0 10px;
+    font-size: 12px;
+    color: #888;
+    user-select: none;
+}
+
+.note-header:active {
+    cursor: grabbing;
+}
+
+.note-content {
+    flex: 1;
+    padding: 10px;
+    background: transparent;
+    border: none;
+    color: #fff;
+    resize: none; /* User can't resize standard textarea, maybe add corner drag later */
+    outline: none;
+    font-family: inherit;
+    font-size: 14px;
+    min-height: 120px;
+}
