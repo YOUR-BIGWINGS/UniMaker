@@ -119,7 +119,10 @@ function App() {
         {/* Top Tools AppBar */}
         <AppBar position="relative" style={{ zIndex: 10, position: 'relative' }}>
           <Toolbar style={{ justifyContent: 'flex-start', gap: '1rem' }}>
-            <Button style={{ fontWeight: 'bold', pointerEvents: 'none' }}>UniMaker</Button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <img src="/logo.png" alt="UniMaker Logo" style={{ width: '24px', height: '24px', objectFit: 'contain' }} />
+              <Button style={{ fontWeight: 'bold', pointerEvents: 'none' }}>UniMaker</Button>
+            </div>
             <Button onClick={addNote} title="Add Note Box" style={{ fontWeight: 'bold' }}>📄+</Button>
           </Toolbar>
         </AppBar>
