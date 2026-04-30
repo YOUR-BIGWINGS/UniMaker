@@ -16,47 +16,101 @@ const GlobalStyles = createGlobalStyle`
 
 function App() {
   const [notes, setNotes] = useState([]);
+  const [connections, setConnections] = useState([]);
   const [activeTool, setActiveTool] = useState('select'); // 'select' or 'string'
   const [draggingId, setDraggingId] = useState(null);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
+  const [draftLine, setDraftLine] = useState(null); // { startNoteId: number, endX: number, endY: number }
+  const [maximizedNoteId, setMaximizedNoteId] = useState(null);
 
   const addNote = () => {
-    setNotes([...notes, { id: Date.now(), x: window.innerWidth / 2 - 125, y: window.innerHeight / 2 - 100, text: '' }]);
+    const newId = Date.now();
+    setNotes([...notes, { id: newId, x: window.innerWidth / 2 - 125, y: window.innerHeight / 2 - 100, text: '', title: `Note ${newId.toString().slice(-4)}` }]);
   };
 
   const handlePointerDown = (e, id) => {
-    if (activeTool !== 'select') return;
-    
-    const note = notes.find((n) => n.id === id);
-    if (!note) return;
+    // If the tool is select but clicking inside the multiline input, let native focus happen instead of moving box
+    if (activeTool === 'select' && e.target.tagName.toLowerCase() === 'textarea') {
+      return;
+    }
 
-    setDraggingId(id);
-    setOffset({
-      x: e.clientX - note.x,
-      y: e.clientY - note.y,
-    });
-    
-    e.target.setPointerCapture(e.pointerId);
+    if (activeTool === 'select') {
+      const note = notes.find((n) => n.id === id);
+      if (!note) return;
+
+      setDraggingId(id);
+      setOffset({
+        x: e.clientX - note.x,
+        y: e.clientY - note.y,
+      });
+      
+      e.target.setPointerCapture(e.pointerId);
+    } else if (activeTool === 'string') {
+      setDraftLine({ startNoteId: id, endX: e.clientX, endY: e.clientY });
+      e.target.setPointerCapture(e.pointerId);
+      e.stopPropagation();
+    }
   };
 
   const handlePointerMove = (e) => {
-    if (draggingId === null) return;
-    
-    setNotes((prevNotes) =>
-      prevNotes.map((note) =>
-        note.id === draggingId
-          ? { ...note, x: e.clientX - offset.x, y: e.clientY - offset.y }
-          : note
-      )
-    );
+    if (activeTool === 'select' && draggingId !== null) {
+      setNotes((prevNotes) =>
+        prevNotes.map((note) =>
+          note.id === draggingId
+            ? { ...note, x: e.clientX - offset.x, y: e.clientY - offset.y }
+            : note
+        )
+      );
+    } else if (activeTool === 'string' && draftLine !== null) {
+      setDraftLine({ ...draftLine, endX: e.clientX, endY: e.clientY });
+    }
   };
 
   const handlePointerUp = (e) => {
-    if (draggingId !== null) {
+    if (activeTool === 'select' && draggingId !== null) {
+      // Check if dropped into the recycle bin
+      const elements = document.elementsFromPoint(e.clientX, e.clientY);
+      const isOverBin = elements.some(el => el.id === 'recycle-bin');
+      
+      if (isOverBin) {
+        setNotes(prev => prev.filter(n => n.id !== draggingId));
+        setConnections(prev => prev.filter(c => c.from !== draggingId && c.to !== draggingId));
+        if (maximizedNoteId === draggingId) {
+          setMaximizedNoteId(null);
+        }
+      }
+
       setDraggingId(null);
+      e.target.releasePointerCapture(e.pointerId);
+    } else if (activeTool === 'string' && draftLine !== null) {
+      // Find the note under the pointer using elementsFromPoint
+      let targetId = null;
+      const elements = document.elementsFromPoint(e.clientX, e.clientY);
+      for (const el of elements) {
+        const potentialId = el.getAttribute('data-note-id');
+        if (potentialId) {
+          targetId = parseInt(potentialId, 10);
+          break;
+        }
+      }
+
+      if (targetId !== null && targetId !== draftLine.startNoteId) {
+        // Create connection
+        setConnections((prev) => [...prev, { from: draftLine.startNoteId, to: targetId }]);
+      }
+      setDraftLine(null);
       e.target.releasePointerCapture(e.pointerId);
     }
   };
+
+  // Helper to get note center for drawing lines
+  const getNoteCenter = (id) => {
+    const note = notes.find(n => n.id === id);
+    if (!note) return { x: 0, y: 0 };
+    return { x: note.x + 125, y: note.y + 75 }; // Approx center of window (width:250, height: ~150)
+  };
+
+  const getDitherBackground = (isActive) => isActive ? { backgroundImage: 'url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAFElEQVQIW2NkYGD4z8DAwMgAI0AMDA4wBAEFwAAAAABJRU5ErkJggg==")', backgroundColor: '#c6c6c6' } : {};
 
   return (
     <ThemeProvider theme={original}>
@@ -64,48 +118,121 @@ function App() {
       <div style={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
         {/* Top Tools AppBar */}
         <AppBar position="relative" style={{ zIndex: 10, position: 'relative' }}>
-          <Toolbar style={{ justifyContent: 'space-between' }}>
-            <span style={{ fontWeight: 'bold', marginRight: '1rem' }}>Universe Studio</span>
-            <Button onClick={addNote} style={{ fontWeight: 'bold' }}>+ Add Note Box</Button>
+          <Toolbar style={{ justifyContent: 'flex-start', gap: '1rem' }}>
+            <Button style={{ fontWeight: 'bold', pointerEvents: 'none' }}>UniMaker</Button>
+            <Button onClick={addNote} title="Add Note Box" style={{ fontWeight: 'bold' }}>📄+</Button>
           </Toolbar>
         </AppBar>
 
         <div style={{ display: 'flex', flex: 1, position: 'relative' }}>
           {/* Left Toolbar */}
           <div style={{ width: '60px', background: '#c6c6c6', borderRight: '2px solid #fff', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '10px 0', gap: '8px', zIndex: 10 }}>
-            <Button active={activeTool === 'select'} onClick={() => setActiveTool('select')} style={{ width: '40px', height: '40px', fontSize: '18px' }}>↖</Button>
-            <Button active={activeTool === 'string'} onClick={() => setActiveTool('string')} style={{ width: '40px', height: '40px', fontSize: '18px' }}>🔗</Button>
+            <Button active={activeTool === 'select'} onClick={() => setActiveTool('select')} title="Select Tool" style={{ width: '40px', height: '40px', fontSize: '18px', ...getDitherBackground(activeTool === 'select') }}>↖</Button>
+            <Button active={activeTool === 'string'} onClick={() => setActiveTool('string')} title="Line Tool" style={{ width: '40px', height: '40px', fontSize: '18px', ...getDitherBackground(activeTool === 'string') }}>〰️</Button>
+            
+            <div style={{ flex: 1 }} /> {/* Spacer */}
+            
+            {/* Recycle Bin */}
+            <div 
+              id="recycle-bin"
+              style={{
+                width: '50px',
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'center',
+                alignItems: 'center',
+                color: 'black',
+                fontFamily: 'ms_sans_serif',
+                fontSize: '10px',
+                marginBottom: '10px'
+              }}
+            >
+              <div style={{ fontSize: '24px', pointerEvents: 'none', marginBottom: '4px' }}>🗑️</div>
+              <span style={{ pointerEvents: 'none', textAlign: 'center' }}>Trash</span>
+            </div>
           </div>
 
           {/* Brain Board Workspace */}
-          <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
-            {notes.map((note) => (
+          <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }} onPointerMove={handlePointerMove} onPointerUp={handlePointerUp}>
+            {/* Display completed and active connections */}
+            <svg style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 1 }}>
+              {connections.map((conn, idx) => {
+                const start = getNoteCenter(conn.from);
+                const end = getNoteCenter(conn.to);
+                return <line key={idx} x1={start.x} y1={start.y} x2={end.x} y2={end.y} stroke="#000" strokeWidth="2" />;
+              })}
+              {draftLine && (
+                <line x1={getNoteCenter(draftLine.startNoteId).x} y1={getNoteCenter(draftLine.startNoteId).y} x2={draftLine.endX - 60} y2={draftLine.endY - 48} stroke="#000" strokeWidth="2" strokeDasharray="4" />
+              )}
+            </svg>
+
+            {notes.map((note) => {
+              const isMaximized = maximizedNoteId === note.id;
+              
+              return (
               <Window
                 key={note.id}
-                style={{ position: 'absolute', left: note.x, top: note.y, width: 250, zIndex: 5 }}
+                data-note-id={note.id}
+                style={{ 
+                  position: 'absolute', 
+                  left: isMaximized ? 0 : note.x, 
+                  top: isMaximized ? 0 : note.y, 
+                  width: isMaximized ? '100%' : 250, 
+                  height: isMaximized ? '100%' : 'auto',
+                  zIndex: isMaximized ? 100 : 5,
+                  display: 'flex',
+                  flexDirection: 'column'
+                }}
+                onPointerDown={(e) => handlePointerDown(e, note.id)}
+                onPointerMove={handlePointerMove}
+                onPointerUp={handlePointerUp}
               >
-                <div
-                  onPointerDown={(e) => handlePointerDown(e, note.id)}
-                  onPointerMove={handlePointerMove}
-                  onPointerUp={handlePointerUp}
-                  style={{ cursor: activeTool === 'select' ? 'grab' : 'default' }}
-                >
-                  <WindowHeader className="window-header">
-                    <span>Note {note.id.toString().slice(-4)}</span>
+                <div style={{ cursor: activeTool === 'select' ? 'grab' : 'default' }}>
+                  <WindowHeader className="window-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <input
+                      value={note.title || `Note ${note.id.toString().slice(-4)}`}
+                      onChange={(e) => {
+                         const newNotes = notes.map(n => n.id === note.id ? {...n, title: e.target.value} : n);
+                         setNotes(newNotes);
+                      }}
+                      style={{
+                        background: 'transparent',
+                        border: 'none',
+                        color: 'inherit',
+                        fontFamily: 'inherit',
+                        fontWeight: 'inherit',
+                        fontSize: 'inherit',
+                        width: 'calc(100% - 30px)',
+                        outline: 'none'
+                      }}
+                      onPointerDown={(e) => e.stopPropagation()}
+                    />
+                    <Button onClick={(e) => { e.stopPropagation(); setMaximizedNoteId(isMaximized ? null : note.id); }} style={{ width: 24, height: 24, minWidth: 0, padding: 0 }}>
+                      <span style={{ transform: isMaximized ? 'none' : 'none', display: 'inline-block' }}>🗖</span>
+                    </Button>
                   </WindowHeader>
                 </div>
-                <WindowContent>
+                <WindowContent style={{ display: 'flex', flexDirection: 'column', flex: 1, padding: isMaximized ? '8px' : undefined }}>
                   <TextInput
                     multiline
-                    rows={4}
+                    rows={isMaximized ? undefined : 4}
                     placeholder="Type your ideas here..."
-                    defaultValue={note.text}
+                    value={note.text || ''}
+                    onChange={(e) => {
+                       const newNotes = notes.map(n => n.id === note.id ? {...n, text: e.target.value} : n);
+                       setNotes(newNotes);
+                    }}
                     fullWidth
-                    style={{ fontFamily: 'ms_sans_serif', resize: 'none' }}
+                    style={{ 
+                      fontFamily: 'ms_sans_serif', 
+                      resize: 'none',
+                      flex: 1,
+                      height: '100%'
+                    }}
                   />
                 </WindowContent>
               </Window>
-            ))}
+            )})}
           </div>
         </div>
       </div>
