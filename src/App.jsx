@@ -12,11 +12,40 @@ const GlobalStyles = createGlobalStyle`
     background-color: #008080; /* Windows 95 classic teal background for the Brain Board */
     font-family: 'ms_sans_serif', sans-serif;
   }
+  
+  button:active, button[aria-pressed="true"], button[data-active="true"], button.active {
+    background-image: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAFElEQVQIW2NkYGD4z8DAwMgAI0AMDA4wBAEFwAAAAABJRU5ErkJggg==") !important;
+    background-color: #c6c6c6 !important;
+  }
 `;
 
 function App() {
-  const [notes, setNotes] = useState([]);
-  const [connections, setConnections] = useState([]);
+  const [workspaces, setWorkspaces] = useState([{ id: 1, name: 'Workspace 1', notes: [], connections: [] }]);
+  const [currentWorkspaceId, setCurrentWorkspaceId] = useState(1);
+  const [showWorkspacePage, setShowWorkspacePage] = useState(false);
+
+  const currentWorkspace = workspaces.find(w => w.id === currentWorkspaceId) || workspaces[0];
+  const notes = currentWorkspace.notes;
+  const connections = currentWorkspace.connections;
+
+  const setNotes = (updater) => {
+    setWorkspaces(prev => prev.map(w => {
+      if (w.id === currentWorkspaceId) {
+        return { ...w, notes: typeof updater === 'function' ? updater(w.notes) : updater };
+      }
+      return w;
+    }));
+  };
+
+  const setConnections = (updater) => {
+    setWorkspaces(prev => prev.map(w => {
+      if (w.id === currentWorkspaceId) {
+        return { ...w, connections: typeof updater === 'function' ? updater(w.connections) : updater };
+      }
+      return w;
+    }));
+  };
+
   const [activeTool, setActiveTool] = useState('select'); // 'select' or 'string'
   const [draggingId, setDraggingId] = useState(null);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
@@ -236,8 +265,67 @@ function App() {
                 </WindowContent>
               </Window>
             )})}
+            
+            {/* Workspace Page Overlay */}
+            {showWorkspacePage && (
+              <Window style={{ position: 'absolute', top: 20, left: 20, right: 20, bottom: 20, zIndex: 150 }}>
+                <WindowHeader style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span>Workspaces</span>
+                  <Button onClick={() => setShowWorkspacePage(false)}>X</Button>
+                </WindowHeader>
+                <WindowContent style={{ height: 'calc(100% - 40px)', overflow: 'auto' }}>
+                  <Button 
+                    onClick={() => {
+                      const newWs = { id: Date.now(), name: `Workspace ${workspaces.length + 1}`, notes: [], connections: [] };
+                      setWorkspaces([...workspaces, newWs]);
+                      setCurrentWorkspaceId(newWs.id);
+                      setShowWorkspacePage(false);
+                    }}
+                    style={{ fontWeight: 'bold', marginBottom: '20px' }}
+                  >
+                    + Make a New Workspace
+                  </Button>
+                  
+                  <div>
+                    {workspaces.map(w => (
+                      <div key={w.id} style={{ display: 'flex', alignItems: 'center', marginBottom: '10px', gap: '10px' }}>
+                        <Button 
+                          active={w.id === currentWorkspaceId} 
+                          onClick={() => { setCurrentWorkspaceId(w.id); setShowWorkspacePage(false); }} 
+                          style={{ width: '200px', textAlign: 'left' }}
+                        >
+                          {w.name} {w.id === currentWorkspaceId && '(Active)'}
+                        </Button>
+                        <TextInput
+                          value={w.name}
+                          onChange={(e) => {
+                            setWorkspaces(prev => prev.map(ws => 
+                              ws.id === w.id ? { ...ws, name: e.target.value } : ws
+                            ));
+                          }}
+                          placeholder="Rename Workspace..."
+                          style={{ width: '150px' }}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </WindowContent>
+              </Window>
+            )}
           </div>
         </div>
+        
+        {/* Bottom Tab / Taskbar */}
+        <AppBar position="relative" style={{ zIndex: 10, position: 'relative' }}>
+          <Toolbar>
+            <Button onClick={() => setShowWorkspacePage(!showWorkspacePage)} active={showWorkspacePage} style={{ fontWeight: 'bold' }}>
+              🗂️ Workspaces
+            </Button>
+            <div style={{ marginLeft: '10px', fontFamily: 'ms_sans_serif' }}>
+              Current: {currentWorkspace.name}
+            </div>
+          </Toolbar>
+        </AppBar>
       </div>
     </ThemeProvider>
   );
