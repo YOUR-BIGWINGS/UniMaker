@@ -165,22 +165,25 @@ function App() {
             <div style={{ flex: 1 }} /> {/* Spacer */}
             
             {/* Recycle Bin */}
-            <div 
-              id="recycle-bin"
-              style={{
-                width: '50px',
-                display: 'flex',
-                flexDirection: 'column',
-                justifyContent: 'center',
-                alignItems: 'center',
-                color: 'black',
-                fontFamily: 'ms_sans_serif',
-                fontSize: '10px',
-                marginBottom: '10px'
-              }}
-            >
-              <div style={{ fontSize: '24px', pointerEvents: 'none', marginBottom: '4px' }}>🗑️</div>
-              <span style={{ pointerEvents: 'none', textAlign: 'center' }}>Trash</span>
+            <div id="recycle-bin" style={{ marginBottom: '10px' }}>
+              <Button
+                style={{
+                  width: '50px',
+                  height: 'auto',
+                  padding: '8px 0',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  color: 'black',
+                  fontFamily: 'ms_sans_serif',
+                  fontSize: '10px',
+                  pointerEvents: 'none'
+                }}
+              >
+                <div style={{ fontSize: '24px', marginBottom: '4px' }}>🗑️</div>
+                <span style={{ textAlign: 'center' }}>Trash</span>
+              </Button>
             </div>
           </div>
 
