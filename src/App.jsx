@@ -23,6 +23,7 @@ function App() {
   const [workspaces, setWorkspaces] = useState([{ id: 1, name: 'Workspace 1', notes: [], connections: [] }]);
   const [currentWorkspaceId, setCurrentWorkspaceId] = useState(1);
   const [showWorkspacePage, setShowWorkspacePage] = useState(false);
+  const [deleteMode, setDeleteMode] = useState(false);
 
   const currentWorkspace = workspaces.find(w => w.id === currentWorkspaceId) || workspaces[0];
   const notes = currentWorkspace.notes;
@@ -139,8 +140,6 @@ function App() {
     return { x: note.x + 125, y: note.y + 75 }; // Approx center of window (width:250, height: ~150)
   };
 
-  const getDitherBackground = (isActive) => isActive ? { backgroundImage: 'url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAFElEQVQIW2NkYGD4z8DAwMgAI0AMDA4wBAEFwAAAAABJRU5ErkJggg==")', backgroundColor: '#c6c6c6' } : {};
-
   return (
     <ThemeProvider theme={original}>
       <GlobalStyles />
@@ -159,8 +158,24 @@ function App() {
         <div style={{ display: 'flex', flex: 1, position: 'relative' }}>
           {/* Left Toolbar */}
           <div style={{ width: '60px', background: '#c6c6c6', borderRight: '2px solid #fff', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '10px 0', gap: '8px', zIndex: 10 }}>
-            <Button active={activeTool === 'select'} onClick={() => setActiveTool('select')} title="Select Tool" style={{ width: '40px', height: '40px', fontSize: '18px', ...getDitherBackground(activeTool === 'select') }}>↖</Button>
-            <Button active={activeTool === 'string'} onClick={() => setActiveTool('string')} title="Line Tool" style={{ width: '40px', height: '40px', fontSize: '18px', ...getDitherBackground(activeTool === 'string') }}>〰️</Button>
+            <Button 
+              className={activeTool === 'select' ? 'active' : ''}
+              active={activeTool === 'select'} 
+              onClick={() => setActiveTool('select')} 
+              title="Select Tool" 
+              style={{ width: '40px', height: '40px', fontSize: '18px' }}
+            >
+              ↖
+            </Button>
+            <Button 
+              className={activeTool === 'string' ? 'active' : ''}
+              active={activeTool === 'string'} 
+              onClick={() => setActiveTool('string')} 
+              title="Line Tool" 
+              style={{ width: '40px', height: '40px', fontSize: '18px' }}
+            >
+              〰️
+            </Button>
             
             <div style={{ flex: 1 }} /> {/* Spacer */}
             
@@ -277,25 +292,52 @@ function App() {
                   <Button onClick={() => setShowWorkspacePage(false)}>X</Button>
                 </WindowHeader>
                 <WindowContent style={{ height: 'calc(100% - 40px)', overflow: 'auto' }}>
-                  <Button 
-                    onClick={() => {
-                      const newWs = { id: Date.now(), name: `Workspace ${workspaces.length + 1}`, notes: [], connections: [] };
-                      setWorkspaces([...workspaces, newWs]);
-                      setCurrentWorkspaceId(newWs.id);
-                      setShowWorkspacePage(false);
-                    }}
-                    style={{ fontWeight: 'bold', marginBottom: '20px' }}
-                  >
-                    + Make a New Workspace
-                  </Button>
+                  <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
+                    <Button 
+                      onClick={() => {
+                        const newWs = { id: Date.now(), name: `Workspace ${workspaces.length + 1}`, notes: [], connections: [] };
+                        setWorkspaces([...workspaces, newWs]);
+                        setCurrentWorkspaceId(newWs.id);
+                        setShowWorkspacePage(false);
+                      }}
+                      style={{ fontWeight: 'bold' }}
+                    >
+                      + Make a New Workspace
+                    </Button>
+                    <Button 
+                      className={deleteMode ? 'active' : ''}
+                      active={deleteMode} 
+                      onClick={() => setDeleteMode(!deleteMode)}
+                      style={{ fontWeight: 'bold', color: deleteMode ? 'red' : 'inherit' }}
+                    >
+                      {deleteMode ? '🗑️ Cancel Delete' : '🗑️ Delete Workspaces'}
+                    </Button>
+                  </div>
                   
                   <div>
                     {workspaces.map(w => (
                       <div key={w.id} style={{ display: 'flex', alignItems: 'center', marginBottom: '10px', gap: '10px' }}>
                         <Button 
+                          className={w.id === currentWorkspaceId ? 'active' : ''}
                           active={w.id === currentWorkspaceId} 
-                          onClick={() => { setCurrentWorkspaceId(w.id); setShowWorkspacePage(false); }} 
-                          style={{ width: '200px', textAlign: 'left' }}
+                          onClick={() => {
+                            if (deleteMode) {
+                              if (window.confirm(`Are you sure you want to delete workspace "${w.name}"?`)) {
+                                const newWorkspaces = workspaces.filter(ws => ws.id !== w.id);
+                                if (newWorkspaces.length === 0) {
+                                  newWorkspaces.push({ id: Date.now(), name: 'Workspace 1', notes: [], connections: [] });
+                                }
+                                setWorkspaces(newWorkspaces);
+                                if (w.id === currentWorkspaceId) {
+                                  setCurrentWorkspaceId(newWorkspaces[0].id);
+                                }
+                              }
+                            } else {
+                              setCurrentWorkspaceId(w.id); 
+                              setShowWorkspacePage(false); 
+                            }
+                          }} 
+                          style={{ width: '200px', textAlign: 'left', borderColor: deleteMode ? 'red' : undefined }}
                         >
                           {w.name} {w.id === currentWorkspaceId && '(Active)'}
                         </Button>
@@ -321,7 +363,12 @@ function App() {
         {/* Bottom Tab / Taskbar */}
         <AppBar position="relative" style={{ zIndex: 10, position: 'relative' }}>
           <Toolbar>
-            <Button onClick={() => setShowWorkspacePage(!showWorkspacePage)} active={showWorkspacePage} style={{ fontWeight: 'bold' }}>
+            <Button 
+              className={showWorkspacePage ? 'active' : ''}
+              active={showWorkspacePage} 
+              onClick={() => setShowWorkspacePage(!showWorkspacePage)} 
+              style={{ fontWeight: 'bold' }}
+            >
               🗂️ Workspaces
             </Button>
             <div style={{ marginLeft: '10px', fontFamily: 'ms_sans_serif' }}>
