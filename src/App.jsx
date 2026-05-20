@@ -2,8 +2,22 @@ import React, { useState } from 'react';
 import { createGlobalStyle, ThemeProvider } from 'styled-components';
 import { styleReset, Window, WindowHeader, WindowContent, Button, AppBar, Toolbar, TextInput } from 'react95';
 import original from 'react95/dist/themes/original';
+import ms_sans_serif from 'react95/dist/fonts/ms_sans_serif.woff2';
+import ms_sans_serif_bold from 'react95/dist/fonts/ms_sans_serif_bold.woff2';
 
 const GlobalStyles = createGlobalStyle`
+  @font-face {
+    font-family: 'ms_sans_serif';
+    src: url('${ms_sans_serif}') format('woff2');
+    font-weight: 400;
+    font-style: normal
+  }
+  @font-face {
+    font-family: 'ms_sans_serif';
+    src: url('${ms_sans_serif_bold}') format('woff2');
+    font-weight: bold;
+    font-style: normal
+  }
   ${styleReset}
   body, html, #root {
     height: 100%;
@@ -52,6 +66,7 @@ function App() {
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const [draftLine, setDraftLine] = useState(null); // { startNoteId: number, endX: number, endY: number }
   const [maximizedNoteId, setMaximizedNoteId] = useState(null);
+  const [isHoveringTrash, setIsHoveringTrash] = useState(false);
 
   const addNote = () => {
     const newId = Date.now();
@@ -91,6 +106,9 @@ function App() {
             : note
         )
       );
+      
+      const elements = document.elementsFromPoint(e.clientX, e.clientY);
+      setIsHoveringTrash(elements.some(el => el.id === 'recycle-bin'));
     } else if (activeTool === 'string' && draftLine !== null) {
       setDraftLine({ ...draftLine, endX: e.clientX, endY: e.clientY });
     }
@@ -111,6 +129,7 @@ function App() {
       }
 
       setDraggingId(null);
+      setIsHoveringTrash(false);
       e.target.releasePointerCapture(e.pointerId);
     } else if (activeTool === 'string' && draftLine !== null) {
       // Find the note under the pointer using elementsFromPoint
@@ -182,6 +201,8 @@ function App() {
             {/* Recycle Bin */}
             <div id="recycle-bin" style={{ marginBottom: '10px' }}>
               <Button
+                active={isHoveringTrash}
+                className={isHoveringTrash ? 'active' : ''}
                 style={{
                   width: '50px',
                   height: 'auto',
