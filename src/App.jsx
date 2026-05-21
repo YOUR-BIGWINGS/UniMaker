@@ -31,6 +31,13 @@ const GlobalStyles = createGlobalStyle`
     background-color: #008080; /* Windows 95 classic teal background for the Brain Board */
     font-family: 'ms_sans_serif', sans-serif;
   }
+  
+  button:active, button[aria-pressed="true"], button[data-active="true"], button.active {
+    background-image: linear-gradient(45deg, ${({theme}) => theme?.material || '#c6c6c6'} 25%, transparent 25%, transparent 75%, ${({theme}) => theme?.material || '#c6c6c6'} 75%), linear-gradient(45deg, ${({theme}) => theme?.material || '#c6c6c6'} 25%, transparent 25%, transparent 75%, ${({theme}) => theme?.material || '#c6c6c6'} 75%) !important;
+    background-color: ${({theme}) => theme?.borderLightest || '#fefefe'} !important;
+    background-size: 4px 4px !important;
+    background-position: 0 0, 2px 2px !important;
+  }
 `;
 
 function App() {
@@ -179,7 +186,7 @@ function App() {
             <TextInput
               value={appVersion}
               onChange={(e) => setAppVersion(e.target.value)}
-              style={{ width: '80px', textAlign: 'center' }}
+              style={{ width: `calc(${appVersion.length || 1}ch + 32px)`, minWidth: '80px', textAlign: 'center' }}
               title="Current Version"
             />
           </Toolbar>
