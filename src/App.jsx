@@ -5,6 +5,11 @@ import original from 'react95/dist/themes/original';
 import ms_sans_serif from 'react95/dist/fonts/ms_sans_serif.woff2';
 import ms_sans_serif_bold from 'react95/dist/fonts/ms_sans_serif_bold.woff2';
 
+// ---------------------------------------------------------
+// APP VERSION - Easy to find in the codebase
+// ---------------------------------------------------------
+export const APP_VERSION = '1.0.0';
+
 const GlobalStyles = createGlobalStyle`
   @font-face {
     font-family: 'ms_sans_serif';
@@ -34,6 +39,7 @@ const GlobalStyles = createGlobalStyle`
 `;
 
 function App() {
+  const [appVersion, setAppVersion] = useState(APP_VERSION);
   const [workspaces, setWorkspaces] = useState([{ id: 1, name: 'Workspace 1', notes: [], connections: [] }]);
   const [currentWorkspaceId, setCurrentWorkspaceId] = useState(1);
   const [showWorkspacePage, setShowWorkspacePage] = useState(false);
@@ -165,12 +171,22 @@ function App() {
       <div style={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
         {/* Top Tools AppBar */}
         <AppBar position="relative" style={{ zIndex: 10, position: 'relative' }}>
-          <Toolbar style={{ justifyContent: 'flex-start', gap: '1rem' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <img src="/logo.png" alt="UniMaker Logo" style={{ width: '24px', height: '24px', objectFit: 'contain' }} />
-              <Button style={{ fontWeight: 'bold', pointerEvents: 'none' }}>UniMaker (alpha)</Button>
+          <Toolbar style={{ justifyContent: 'space-between', width: '100%', boxSizing: 'border-box' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <img src="/logo.png" alt="UniMaker Logo" style={{ width: '24px', height: '24px', objectFit: 'contain' }} />
+                <Button style={{ fontWeight: 'bold', pointerEvents: 'none' }}>UniMaker</Button>
+              </div>
+              <Button onClick={addNote} title="Add Note Box" style={{ fontWeight: 'bold' }}>📄+</Button>
             </div>
-            <Button onClick={addNote} title="Add Note Box" style={{ fontWeight: 'bold' }}>📄+</Button>
+            
+            {/* Context Version Display */}
+            <TextInput
+              value={appVersion}
+              onChange={(e) => setAppVersion(e.target.value)}
+              style={{ width: '80px', textAlign: 'center' }}
+              title="Current Version"
+            />
           </Toolbar>
         </AppBar>
 
