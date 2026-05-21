@@ -6,9 +6,9 @@ import ms_sans_serif from 'react95/dist/fonts/ms_sans_serif.woff2';
 import ms_sans_serif_bold from 'react95/dist/fonts/ms_sans_serif_bold.woff2';
 
 // ---------------------------------------------------------
-// APP VERSION - Easy to find in the codebase
+// APP VERSION - Easy to find in the codebase because I'm stupid
 // ---------------------------------------------------------
-export const APP_VERSION = '1.0.0';
+export const APP_VERSION = 'ALPHA VER 1.0.0';
 
 const GlobalStyles = createGlobalStyle`
   @font-face {
@@ -30,11 +30,6 @@ const GlobalStyles = createGlobalStyle`
     overflow: hidden;
     background-color: #008080; /* Windows 95 classic teal background for the Brain Board */
     font-family: 'ms_sans_serif', sans-serif;
-  }
-  
-  button:active, button[aria-pressed="true"], button[data-active="true"], button.active {
-    background-image: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAFElEQVQIW2NkYGD4z8DAwMgAI0AMDA4wBAEFwAAAAABJRU5ErkJggg==") !important;
-    background-color: #c6c6c6 !important;
   }
 `;
 
