@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { createGlobalStyle, ThemeProvider } from 'styled-components';
-import { styleReset, Window, WindowHeader, WindowContent, Button, AppBar, Toolbar, TextInput } from 'react95';
+import { styleReset, Window, WindowHeader, WindowContent, Button, AppBar, Toolbar, TextInput, Select } from 'react95';
 import original from 'react95/dist/themes/original';
 import ms_sans_serif from 'react95/dist/fonts/ms_sans_serif.woff2';
 import ms_sans_serif_bold from 'react95/dist/fonts/ms_sans_serif_bold.woff2';
@@ -8,7 +8,7 @@ import ms_sans_serif_bold from 'react95/dist/fonts/ms_sans_serif_bold.woff2';
 // ---------------------------------------------------------
 // APP VERSION - Easy to find in the codebase because I'm stupid
 // ---------------------------------------------------------
-export const APP_VERSION = 'ALPHA VER 1.0.0';
+export const APP_VERSION = 'BETA VER 3.9.7';
 
 const GlobalStyles = createGlobalStyle`
   @font-face {
@@ -33,10 +33,8 @@ const GlobalStyles = createGlobalStyle`
   }
   
   button:active, button[aria-pressed="true"], button[data-active="true"], button.active {
-    background-image: linear-gradient(45deg, ${({theme}) => theme?.material || '#c6c6c6'} 25%, transparent 25%, transparent 75%, ${({theme}) => theme?.material || '#c6c6c6'} 75%), linear-gradient(45deg, ${({theme}) => theme?.material || '#c6c6c6'} 25%, transparent 25%, transparent 75%, ${({theme}) => theme?.material || '#c6c6c6'} 75%) !important;
-    background-color: ${({theme}) => theme?.borderLightest || '#fefefe'} !important;
-    background-size: 4px 4px !important;
-    background-position: 0 0, 2px 2px !important;
+    background-image: none !important;
+    background-color: #a0a0a0 !important;
   }
 `;
 
@@ -46,6 +44,15 @@ function App() {
   const [currentWorkspaceId, setCurrentWorkspaceId] = useState(1);
   const [showWorkspacePage, setShowWorkspacePage] = useState(false);
   const [deleteMode, setDeleteMode] = useState(false);
+  
+  // Timeline state
+  const [timelines, setTimelines] = useState([{ id: 1, name: 'Main Timeline', events: [], connections: [] }]);
+  const [currentTimelineId, setCurrentTimelineId] = useState(1);
+  const [showTimelinePage, setShowTimelinePage] = useState(false);
+  
+  const [timelineDraggingId, setTimelineDraggingId] = useState(null);
+  const [timelineOffset, setTimelineOffset] = useState({ x: 0, y: 0 });
+  const [timelineDraftLine, setTimelineDraftLine] = useState(null);
 
   const currentWorkspace = workspaces.find(w => w.id === currentWorkspaceId) || workspaces[0];
   const notes = currentWorkspace.notes;
@@ -167,6 +174,156 @@ function App() {
     return { x: note.x + 125, y: note.y + 75 }; // Approx center of window (width:250, height: ~150)
   };
 
+  const getTimelineEventCenter = (tId, evId) => {
+    const t = timelines.find(t => t.id === tId);
+    if (!t) return {x: 0, y: 0};
+    const ev = t.events.find(ev => ev.id === evId);
+    if (!ev) return {x: 0, y: 0};
+    return { x: (ev.x || 0) + 125, y: (ev.y || 0) + 100 }; 
+  };
+
+  const handleTimelinePointerDown = (e, id) => {
+    if (activeTool === 'select' && (e.target.tagName.toLowerCase() === 'textarea' || e.target.tagName.toLowerCase() === 'input')) return;
+
+    if (activeTool === 'select') {
+      const t = timelines.find(t => t.id === currentTimelineId);
+      if (!t) return;
+      const ev = t.events.find(ev => ev.id === id);
+      if (!ev) return;
+      setTimelineDraggingId(id);
+      
+      const parentRect = document.getElementById('timeline-board').getBoundingClientRect();
+      
+      setTimelineOffset({
+        x: e.clientX - parentRect.left - (ev.x || 0),
+        y: e.clientY - parentRect.top - (ev.y || 0),
+      });
+      e.target.setPointerCapture(e.pointerId);
+    } else if (activeTool === 'string') {
+      const parentRect = document.getElementById('timeline-board').getBoundingClientRect();
+      setTimelineDraftLine({ startId: id, endX: e.clientX - parentRect.left, endY: e.clientY - parentRect.top });
+      e.target.setPointerCapture(e.pointerId);
+      e.stopPropagation();
+    }
+  };
+
+  const handleTimelinePointerMove = (e) => {
+    if (activeTool === 'select' && timelineDraggingId !== null) {
+      const parentRect = document.getElementById('timeline-board').getBoundingClientRect();
+      
+      setTimelines(prev => prev.map(t => {
+        if (t.id !== currentTimelineId) return t;
+        return {
+          ...t,
+          events: t.events.map(ev => 
+             ev.id === timelineDraggingId 
+             ? { ...ev, x: e.clientX - parentRect.left - timelineOffset.x, y: e.clientY - parentRect.top - timelineOffset.y } 
+             : ev
+          )
+        };
+      }));
+      
+      const elements = document.elementsFromPoint(e.clientX, e.clientY);
+      setIsHoveringTrash(elements.some(el => el.id === 'timeline-recycle-bin'));
+    } else if (activeTool === 'string' && timelineDraftLine !== null) {
+      const parentRect = document.getElementById('timeline-board').getBoundingClientRect();
+      setTimelineDraftLine(prev => ({ ...prev, endX: e.clientX - parentRect.left, endY: e.clientY - parentRect.top }));
+    }
+  };
+
+  const handleTimelinePointerUp = (e) => {
+    if (activeTool === 'select' && timelineDraggingId !== null) {
+      if (isHoveringTrash) {
+        // Delete the currently dragged timeline event
+        setTimelines(prev => prev.map(t => {
+          if (t.id !== currentTimelineId) return t;
+          return {
+            ...t,
+            events: t.events.filter(ev => ev.id !== timelineDraggingId),
+            connections: (t.connections || []).filter(c => c.from !== timelineDraggingId && c.to !== timelineDraggingId)
+          };
+        }));
+        setIsHoveringTrash(false);
+      }
+      setTimelineDraggingId(null);
+      e.target.releasePointerCapture(e.pointerId);
+    } else if (activeTool === 'string' && timelineDraftLine !== null) {
+      // Find the event under the pointer
+      let targetId = null;
+      const elements = document.elementsFromPoint(e.clientX, e.clientY);
+      for (const el of elements) {
+        const potentialId = el.getAttribute('data-timeline-event-id');
+        if (potentialId) {
+          targetId = parseInt(potentialId, 10);
+          break;
+        }
+      }
+
+      if (targetId !== null && targetId !== timelineDraftLine.startId) {
+        setTimelines(prev => prev.map(t => {
+           if (t.id !== currentTimelineId) return t;
+           return {
+              ...t,
+              connections: [...(t.connections || []), { from: timelineDraftLine.startId, to: targetId }]
+           };
+        }));
+      }
+      setTimelineDraftLine(null);
+      e.target.releasePointerCapture(e.pointerId);
+    }
+  };
+  
+  // Calculate Timeline Link Colors (Connected Components logic)
+  const getTimelineLinkColors = (tId) => {
+      const t = timelines.find(t => t.id === tId);
+      if (!t) return {};
+      
+      const adj = {};
+      t.events.forEach(e => adj[e.id] = new Set());
+      (t.connections || []).forEach(c => {
+         if (adj[c.from] && adj[c.to]) {
+             adj[c.from].add(c.to);
+             adj[c.to].add(c.from);
+         }
+      });
+      
+      const visited = new Set();
+      const components = [];
+      
+      t.events.forEach(e => {
+         if (!visited.has(e.id)) {
+            const comp = [];
+            const q = [e.id];
+            visited.add(e.id);
+            while(q.length > 0) {
+               const u = q.shift();
+               comp.push(u);
+               for (const v of adj[u]) {
+                  if (!visited.has(v)) {
+                     visited.add(v);
+                     q.push(v);
+                  }
+               }
+            }
+            if (comp.length > 1) {
+              components.push(comp);
+            }
+         }
+      });
+      
+      // Sort components by size descending so largest takes top color
+      components.sort((a,b) => b.length - a.length);
+      
+      const palette = ['#e6194b', '#3cb44b', '#f58231', '#4363d8', '#911eb4', '#f032e6', '#ffe119'];
+      const edgeColors = {};
+      
+      components.forEach((comp, idx) => {
+         const color = palette[idx % palette.length];
+         comp.forEach(nodeId => edgeColors[nodeId] = color);
+      });
+      return edgeColors;
+  };
+
   return (
     <ThemeProvider theme={original}>
       <GlobalStyles />
@@ -180,6 +337,7 @@ function App() {
                 <Button style={{ fontWeight: 'bold', pointerEvents: 'none' }}>UniMaker</Button>
               </div>
               <Button onClick={addNote} title="Add Note Box" style={{ fontWeight: 'bold' }}>📄+</Button>
+              <Button onClick={() => setShowTimelinePage(!showTimelinePage)} title="Timeline Panel" className={showTimelinePage ? 'active' : ''} active={showTimelinePage} style={{ fontWeight: 'bold' }}>⏱️ Timeline</Button>
             </div>
             
             {/* Context Version Display */}
@@ -212,6 +370,15 @@ function App() {
               style={{ width: '40px', height: '40px', fontSize: '18px' }}
             >
               〰️
+            </Button>
+            <Button 
+              className={activeTool === 'scissors' ? 'active' : ''}
+              active={activeTool === 'scissors'} 
+              onClick={() => setActiveTool('scissors')} 
+              title="Scissors Tool (Cut Connections)" 
+              style={{ width: '40px', height: '40px', fontSize: '20px' }}
+            >
+              ✂️
             </Button>
             
             <div style={{ flex: 1 }} /> {/* Spacer */}
@@ -248,10 +415,33 @@ function App() {
               {connections.map((conn, idx) => {
                 const start = getNoteCenter(conn.from);
                 const end = getNoteCenter(conn.to);
-                return <line key={idx} x1={start.x} y1={start.y} x2={end.x} y2={end.y} stroke="#000" strokeWidth="2" />;
+                return (
+                  <line 
+                    key={idx} 
+                    x1={start.x} y1={start.y} 
+                    x2={end.x} y2={end.y} 
+                    stroke={conn.color || "#000"} 
+                    strokeWidth="4" 
+                    style={{ pointerEvents: activeTool === 'scissors' || activeTool === 'select' ? 'stroke' : 'none', cursor: activeTool === 'scissors' ? 'crosshair' : activeTool === 'select' ? 'pointer' : 'default' }}
+                    onClick={(e) => {
+                      if (activeTool === 'scissors') {
+                        setConnections(prev => prev.filter((_, i) => i !== idx));
+                      } else if (activeTool === 'select') {
+                        // Open a native color picker to change the connection color
+                        const input = document.createElement('input');
+                        input.type = 'color';
+                        input.value = conn.color || '#000000';
+                        input.onchange = (ev) => {
+                          setConnections(prev => prev.map((c, i) => i === idx ? { ...c, color: ev.target.value } : c));
+                        };
+                        input.click();
+                      }
+                    }}
+                  />
+                );
               })}
               {draftLine && (
-                <line x1={getNoteCenter(draftLine.startNoteId).x} y1={getNoteCenter(draftLine.startNoteId).y} x2={draftLine.endX - 60} y2={draftLine.endY - 48} stroke="#000" strokeWidth="2" strokeDasharray="4" />
+                <line x1={getNoteCenter(draftLine.startNoteId).x} y1={getNoteCenter(draftLine.startNoteId).y} x2={draftLine.endX - 60} y2={draftLine.endY - 48} stroke="#000" strokeWidth="4" strokeDasharray="4" />
               )}
             </svg>
 
@@ -396,9 +586,210 @@ function App() {
                 </WindowContent>
               </Window>
             )}
+
+            {/* Timeline Page Overlay */}
+            {showTimelinePage && (
+              <Window style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '60%', zIndex: 155, borderTop: 'none', boxShadow: '0px 10px 20px rgba(0,0,0,0.5)' }}>
+                <WindowHeader style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span>Timeline Panel</span>
+                  <Button onClick={() => setShowTimelinePage(false)}>X</Button>
+                </WindowHeader>
+                <WindowContent style={{ display: 'flex', flexDirection: 'column', height: 'calc(100% - 40px)', padding: 0 }}>
+                  {/* Timeline Selection Bar */}
+                  <div style={{ padding: '10px', background: '#dfdfdf', borderBottom: '2px solid #848584', display: 'flex', gap: '10px', overflowX: 'auto', alignItems: 'center' }}>
+                    <Button 
+                      onClick={() => {
+                        const newTl = { id: Date.now(), name: `Timeline ${timelines.length + 1}`, events: [] };
+                        setTimelines([...timelines, newTl]);
+                        setCurrentTimelineId(newTl.id);
+                      }}
+                      style={{ fontWeight: 'bold', minWidth: 'max-content' }}
+                    >
+                      + Make Timeline
+                    </Button>
+                    <Button
+                      onClick={() => {
+                        const currentTl = timelines.find(t => t.id === currentTimelineId);
+                        if (!currentTl) return;
+
+                        const newEvent = {
+                          id: Date.now() + 1,
+                          timestamp: new Date().toLocaleTimeString(),
+                          workspaceId: currentWorkspaceId,
+                          text: '',
+                          x: 100 + (currentTl.events.length * 30),
+                          y: 100
+                        };
+
+                        setTimelines(prev => prev.map(t => t.id === currentTimelineId ? { ...t, events: [...t.events, newEvent] } : t));
+                      }}
+                      title="Add Timestamp Event"
+                      style={{ fontWeight: 'bold', minWidth: 'max-content' }}
+                    >
+                      ⏱️+ Timestamp
+                    </Button>
+                    {timelines.map(tl => (
+                      <div key={tl.id} style={{ display: 'flex', alignItems: 'center' }}>
+                        <Button 
+                          className={tl.id === currentTimelineId ? 'active' : ''}
+                          active={tl.id === currentTimelineId} 
+                          onClick={() => setCurrentTimelineId(tl.id)} 
+                          style={{ minWidth: 'max-content' }}
+                        >
+                          {tl.name}
+                        </Button>
+                        <TextInput
+                          value={tl.name}
+                          onChange={(e) => {
+                            setTimelines(prev => prev.map(t => t.id === tl.id ? { ...t, name: e.target.value } : t));
+                          }}
+                          style={{ width: '100px', marginLeft: '5px' }}
+                        />
+                      </div>
+                    ))}
+
+                    <div style={{ flex: 1 }} />
+                    <Button
+                      id="timeline-recycle-bin"
+                      active={isHoveringTrash}
+                      style={{
+                        background: isHoveringTrash ? '#ffcccb' : undefined,
+                        display: 'flex', alignItems: 'center', gap: '5px',
+                        fontWeight: 'bold', pointerEvents: 'none'
+                      }}
+                    >
+                      <span style={{ fontSize: '18px' }}>🗑️</span> Trash
+                    </Button>
+                  </div>
+
+                  {/* Current Timeline View */}
+                  <div id="timeline-board" style={{ flex: 1, overflow: 'auto', background: '#fff', position: 'relative' }} onPointerMove={handleTimelinePointerMove} onPointerUp={handleTimelinePointerUp}>
+                    
+                    <div style={{ width: '10000px', height: '10000px', position: 'relative' }}>
+                      {/* SVG overlay for Timeline Connections */}
+                      <svg style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 1, overflow: 'visible' }}>
+                        {(timelines.find(t => t.id === currentTimelineId)?.connections || []).map((conn, idx) => {
+                          const start = getTimelineEventCenter(currentTimelineId, conn.from);
+                        const end = getTimelineEventCenter(currentTimelineId, conn.to);
+                        const colors = getTimelineLinkColors(currentTimelineId);
+                        // Users can override auto-colored values with manual conn.color assigned
+                        const color = conn.color || colors[conn.from] || '#000';
+                        return (
+                          <line 
+                            key={idx} 
+                            x1={start.x} y1={start.y} 
+                            x2={end.x} y2={end.y} 
+                            stroke={color} 
+                            strokeWidth="6"
+                            style={{ pointerEvents: activeTool === 'scissors' || activeTool === 'select' ? 'stroke' : 'none', cursor: activeTool === 'scissors' ? 'crosshair' : activeTool === 'select' ? 'pointer' : 'default' }}
+                            onClick={(e) => {
+                              if (activeTool === 'scissors') {
+                                setTimelines(prev => prev.map(t => t.id === currentTimelineId ? {
+                                  ...t,
+                                  connections: t.connections.filter((_, i) => i !== idx)
+                                } : t));
+                              } else if (activeTool === 'select') {
+                                // Open a native color picker to change the connection color
+                                const input = document.createElement('input');
+                                input.type = 'color';
+                                input.value = color === '#000' ? '#000000' : color;
+                                input.onchange = (ev) => {
+                                  setTimelines(prev => prev.map(t => t.id === currentTimelineId ? {
+                                    ...t,
+                                    connections: t.connections.map((c, i) => i === idx ? { ...c, color: ev.target.value } : c)
+                                  } : t));
+                                };
+                                input.click();
+                              }
+                            }}
+                          />
+                        );
+                      })}
+                      {timelineDraftLine && (() => {
+                        const start = getTimelineEventCenter(currentTimelineId, timelineDraftLine.startId);
+                        return <line x1={start.x} y1={start.y} x2={timelineDraftLine.endX} y2={timelineDraftLine.endY} stroke="#000" strokeWidth="6" strokeDasharray="4" />;
+                      })()}
+                    </svg>
+
+                    {(timelines.find(t => t.id === currentTimelineId)?.events || []).map((ev, index, arr) => {
+                        const linkedWorkspace = workspaces.find(w => w.id === ev.workspaceId);
+                        return (
+                          <div 
+                            key={ev.id}
+                            data-timeline-event-id={ev.id}
+                            onPointerDown={(e) => handleTimelinePointerDown(e, ev.id)}
+                            style={{ 
+                              position: 'absolute',
+                              left: ev.x || 100,
+                              top: ev.y || 100,
+                              zIndex: 5,
+                              display: 'flex', flexDirection: 'column', alignItems: 'center', background: '#c6c6c6', border: '2px solid #000', padding: '10px', boxShadow: '2px 2px 0px #000', width: '250px' 
+                            }}
+                          >
+                            <TextInput
+                              value={ev.timestamp}
+                              onChange={(e) => {
+                                setTimelines(prev => prev.map(t => t.id === currentTimelineId ? {
+                                  ...t, 
+                                  events: t.events.map(eObj => eObj.id === ev.id ? { ...eObj, timestamp: e.target.value } : eObj)
+                                } : t));
+                              }}
+                              style={{ marginBottom: '8px', fontWeight: 'bold', textAlign: 'center', width: '100%' }}
+                            />
+                            
+                            {/* Its Own Notepad */}
+                            <TextInput
+                              multiline
+                              value={ev.text}
+                              onChange={(e) => {
+                                setTimelines(prev => prev.map(t => t.id === currentTimelineId ? {
+                                  ...t, 
+                                  events: t.events.map(eObj => eObj.id === ev.id ? { ...eObj, text: e.target.value } : eObj)
+                                } : t));
+                              }}
+                              placeholder="Timestamp notes..."
+                              style={{ width: '100%', height: '100px', marginBottom: '8px', resize: 'none' }}
+                            />
+
+                            <div style={{ display: 'flex', width: '100%', marginBottom: '8px', gap: '5px', alignItems: 'center' }}>
+                              <span style={{ fontSize: '12px' }}>Link:</span>
+                              <Select
+                                value={ev.workspaceId}
+                                options={workspaces.map(w => ({ value: w.id, label: w.name }))}
+                                onChange={(option) => {
+                                  setTimelines(prev => prev.map(t => t.id === currentTimelineId ? {
+                                    ...t, 
+                                    events: t.events.map(eObj => eObj.id === ev.id ? { ...eObj, workspaceId: option.value } : eObj)
+                                  } : t));
+                                }}
+                                menuMaxHeight={160}
+                                style={{ flex: 1, fontFamily: 'ms_sans_serif' }}
+                              />
+                            </div>
+
+                            <Button 
+                              onClick={() => {
+                                if (linkedWorkspace) {
+                                  setCurrentWorkspaceId(linkedWorkspace.id);
+                                  setShowTimelinePage(false);
+                                }
+                              }}
+                              style={{ width: '100%', fontWeight: linkedWorkspace ? 'bold' : 'normal' }}
+                              disabled={!linkedWorkspace}
+                            >
+                              Go to {linkedWorkspace ? linkedWorkspace.name : 'Unknown Workspace'} 🔗
+                            </Button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </WindowContent>
+              </Window>
+            )}
           </div>
         </div>
-        
+
         {/* Bottom Tab / Taskbar */}
         <AppBar position="relative" style={{ zIndex: 10, position: 'relative' }}>
           <Toolbar>
