@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { createGlobalStyle, ThemeProvider } from 'styled-components';
 import { styleReset, Window, WindowHeader, WindowContent, Button, AppBar, Toolbar, TextInput, Select } from 'react95';
 import original from 'react95/dist/themes/original';
@@ -8,7 +8,7 @@ import ms_sans_serif_bold from 'react95/dist/fonts/ms_sans_serif_bold.woff2';
 // ---------------------------------------------------------
 // APP VERSION - Easy to find in the codebase because I'm stupid
 // ---------------------------------------------------------
-export const APP_VERSION = 'BETA VER 3.9.7';
+export const APP_VERSION = 'VER 1.4.6';
 
 const GlobalStyles = createGlobalStyle`
   @font-face {
@@ -53,6 +53,83 @@ function App() {
   const [timelineDraggingId, setTimelineDraggingId] = useState(null);
   const [timelineOffset, setTimelineOffset] = useState({ x: 0, y: 0 });
   const [timelineDraftLine, setTimelineDraftLine] = useState(null);
+  const [timelineZoom, setTimelineZoom] = useState(1);
+
+  const fileInputRef = useRef(null);
+
+  useEffect(() => {
+    const el = document.getElementById('timeline-board');
+    if (!el) return;
+    const handleWheel = (e) => {
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault();
+        setTimelineZoom(prev => {
+          const newZoom = prev - e.deltaY * 0.002;
+          return Math.min(Math.max(0.1, newZoom), 3);
+        });
+      }
+    };
+    el.addEventListener('wheel', handleWheel, { passive: false });
+    return () => el.removeEventListener('wheel', handleWheel);
+  }, [showTimelinePage]);
+
+  useEffect(() => {
+    const savedData = localStorage.getItem('uniMakerSave');
+    if (savedData) {
+      try {
+        const parsed = JSON.parse(savedData);
+        if (parsed.workspaces && parsed.workspaces.length > 0) {
+          setWorkspaces(parsed.workspaces);
+          setCurrentWorkspaceId(parsed.workspaces[0].id);
+        }
+        if (parsed.timelines && parsed.timelines.length > 0) {
+          setTimelines(parsed.timelines);
+          setCurrentTimelineId(parsed.timelines[0].id);
+        }
+      } catch (e) {
+        console.error("Failed to parse saved data", e);
+      }
+    }
+  }, []);
+
+  const handleSaveToBrowser = () => {
+    localStorage.setItem('uniMakerSave', JSON.stringify({ workspaces, timelines }));
+    alert('Successfully saved to browser storage!');
+  };
+
+  const handleSaveToFile = () => {
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify({ workspaces, timelines }, null, 2));
+    const downloadAnchorNode = document.createElement('a');
+    downloadAnchorNode.setAttribute("href", dataStr);
+    downloadAnchorNode.setAttribute("download", "unimaker_save.json");
+    document.body.appendChild(downloadAnchorNode);
+    downloadAnchorNode.click();
+    downloadAnchorNode.remove();
+  };
+
+  const handleFileChange = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const parsed = JSON.parse(event.target.result);
+        if (parsed.workspaces && parsed.workspaces.length > 0) {
+          setWorkspaces(parsed.workspaces);
+          setCurrentWorkspaceId(parsed.workspaces[0].id);
+        }
+        if (parsed.timelines && parsed.timelines.length > 0) {
+          setTimelines(parsed.timelines);
+          setCurrentTimelineId(parsed.timelines[0].id);
+        }
+        alert('Successfully loaded from file!');
+      } catch (err) {
+        alert('Error loading file. Make sure it is a valid Uni-Maker save.');
+      }
+      e.target.value = ''; // Reset input to allow re-uploading the same file
+    };
+    reader.readAsText(file);
+  };
 
   const currentWorkspace = workspaces.find(w => w.id === currentWorkspaceId) || workspaces[0];
   const notes = currentWorkspace.notes;
@@ -192,16 +269,22 @@ function App() {
       if (!ev) return;
       setTimelineDraggingId(id);
       
-      const parentRect = document.getElementById('timeline-board').getBoundingClientRect();
+      const board = document.getElementById('timeline-board');
+      const parentRect = board.getBoundingClientRect();
       
       setTimelineOffset({
-        x: e.clientX - parentRect.left - (ev.x || 0),
-        y: e.clientY - parentRect.top - (ev.y || 0),
+        x: (e.clientX - parentRect.left + board.scrollLeft) / timelineZoom - (ev.x || 0),
+        y: (e.clientY - parentRect.top + board.scrollTop) / timelineZoom - (ev.y || 0),
       });
       e.target.setPointerCapture(e.pointerId);
     } else if (activeTool === 'string') {
-      const parentRect = document.getElementById('timeline-board').getBoundingClientRect();
-      setTimelineDraftLine({ startId: id, endX: e.clientX - parentRect.left, endY: e.clientY - parentRect.top });
+      const board = document.getElementById('timeline-board');
+      const parentRect = board.getBoundingClientRect();
+      setTimelineDraftLine({ 
+        startId: id, 
+        endX: (e.clientX - parentRect.left + board.scrollLeft) / timelineZoom, 
+        endY: (e.clientY - parentRect.top + board.scrollTop) / timelineZoom 
+      });
       e.target.setPointerCapture(e.pointerId);
       e.stopPropagation();
     }
@@ -209,25 +292,36 @@ function App() {
 
   const handleTimelinePointerMove = (e) => {
     if (activeTool === 'select' && timelineDraggingId !== null) {
-      const parentRect = document.getElementById('timeline-board').getBoundingClientRect();
+      const board = document.getElementById('timeline-board');
+      const parentRect = board.getBoundingClientRect();
       
       setTimelines(prev => prev.map(t => {
         if (t.id !== currentTimelineId) return t;
         return {
           ...t,
-          events: t.events.map(ev => 
-             ev.id === timelineDraggingId 
-             ? { ...ev, x: e.clientX - parentRect.left - timelineOffset.x, y: e.clientY - parentRect.top - timelineOffset.y } 
-             : ev
-          )
+          events: t.events.map(ev => {
+             if (ev.id === timelineDraggingId) {
+                 let newX = (e.clientX - parentRect.left + board.scrollLeft) / timelineZoom - timelineOffset.x;
+                 let newY = (e.clientY - parentRect.top + board.scrollTop) / timelineZoom - timelineOffset.y;
+                 newX = Math.max(0, newX);
+                 newY = Math.max(0, newY);
+                 return { ...ev, x: newX, y: newY };
+             }
+             return ev;
+          })
         };
       }));
       
       const elements = document.elementsFromPoint(e.clientX, e.clientY);
       setIsHoveringTrash(elements.some(el => el.id === 'timeline-recycle-bin'));
     } else if (activeTool === 'string' && timelineDraftLine !== null) {
-      const parentRect = document.getElementById('timeline-board').getBoundingClientRect();
-      setTimelineDraftLine(prev => ({ ...prev, endX: e.clientX - parentRect.left, endY: e.clientY - parentRect.top }));
+      const board = document.getElementById('timeline-board');
+      const parentRect = board.getBoundingClientRect();
+      setTimelineDraftLine(prev => ({ 
+        ...prev, 
+        endX: (e.clientX - parentRect.left + board.scrollLeft) / timelineZoom, 
+        endY: (e.clientY - parentRect.top + board.scrollTop) / timelineZoom 
+      }));
     }
   };
 
@@ -336,8 +430,15 @@ function App() {
                 <img src="/logo.png" alt="UniMaker Logo" style={{ width: '24px', height: '24px', objectFit: 'contain' }} />
                 <Button style={{ fontWeight: 'bold', pointerEvents: 'none' }}>UniMaker</Button>
               </div>
-              <Button onClick={addNote} title="Add Note Box" style={{ fontWeight: 'bold' }}>📄+</Button>
-              <Button onClick={() => setShowTimelinePage(!showTimelinePage)} title="Timeline Panel" className={showTimelinePage ? 'active' : ''} active={showTimelinePage} style={{ fontWeight: 'bold' }}>⏱️ Timeline</Button>
+              <Button onClick={addNote} title="Add Note Box" style={{ fontWeight: 'bold' }}>[+] Note</Button>
+              <Button onClick={() => setShowTimelinePage(!showTimelinePage)} title="Timeline Panel" className={showTimelinePage ? 'active' : ''} active={showTimelinePage} style={{ fontWeight: 'bold' }}>◷ Timeline</Button>
+              
+              <div style={{ width: '2px', background: '#848584', height: '24px', margin: '0 8px' }}></div>
+              
+              <Button onClick={handleSaveToBrowser} title="Save to Browser Storage" style={{ fontWeight: 'bold' }}>💾 Save</Button>
+              <Button onClick={handleSaveToFile} title="Export to File" style={{ fontWeight: 'bold' }}>📤 Export</Button>
+              <Button onClick={() => fileInputRef.current && fileInputRef.current.click()} title="Import from File" style={{ fontWeight: 'bold' }}>📥 Import</Button>
+              <input type="file" ref={fileInputRef} onChange={handleFileChange} accept=".json" style={{ display: 'none' }} />
             </div>
             
             {/* Context Version Display */}
@@ -360,7 +461,7 @@ function App() {
               title="Select Tool" 
               style={{ width: '40px', height: '40px', fontSize: '18px' }}
             >
-              ↖
+              ⬉
             </Button>
             <Button 
               className={activeTool === 'string' ? 'active' : ''}
@@ -369,7 +470,7 @@ function App() {
               title="Line Tool" 
               style={{ width: '40px', height: '40px', fontSize: '18px' }}
             >
-              〰️
+              ╱
             </Button>
             <Button 
               className={activeTool === 'scissors' ? 'active' : ''}
@@ -378,7 +479,7 @@ function App() {
               title="Scissors Tool (Cut Connections)" 
               style={{ width: '40px', height: '40px', fontSize: '20px' }}
             >
-              ✂️
+              ✂
             </Button>
             
             <div style={{ flex: 1 }} /> {/* Spacer */}
@@ -402,7 +503,7 @@ function App() {
                   pointerEvents: 'none'
                 }}
               >
-                <div style={{ fontSize: '24px', marginBottom: '4px' }}>🗑️</div>
+                <div style={{ fontSize: '24px', marginBottom: '4px' }}>♻</div>
                 <span style={{ textAlign: 'center' }}>Trash</span>
               </Button>
             </div>
@@ -539,7 +640,7 @@ function App() {
                       onClick={() => setDeleteMode(!deleteMode)}
                       style={{ fontWeight: 'bold', color: deleteMode ? 'red' : 'inherit' }}
                     >
-                      {deleteMode ? '🗑️ Cancel Delete' : '🗑️ Delete Workspaces'}
+                      {deleteMode ? '� Cancel Delete' : '♻ Delete Workspaces'}
                     </Button>
                   </div>
                   
@@ -626,7 +727,7 @@ function App() {
                       title="Add Timestamp Event"
                       style={{ fontWeight: 'bold', minWidth: 'max-content' }}
                     >
-                      ⏱️+ Timestamp
+                      ◷+ Timestamp
                     </Button>
                     {timelines.map(tl => (
                       <div key={tl.id} style={{ display: 'flex', alignItems: 'center' }}>
@@ -649,23 +750,24 @@ function App() {
                     ))}
 
                     <div style={{ flex: 1 }} />
-                    <Button
-                      id="timeline-recycle-bin"
-                      active={isHoveringTrash}
-                      style={{
-                        background: isHoveringTrash ? '#ffcccb' : undefined,
-                        display: 'flex', alignItems: 'center', gap: '5px',
-                        fontWeight: 'bold', pointerEvents: 'none'
-                      }}
-                    >
-                      <span style={{ fontSize: '18px' }}>🗑️</span> Trash
-                    </Button>
+                    <div id="timeline-recycle-bin">
+                      <Button
+                        active={isHoveringTrash}
+                        style={{
+                          background: isHoveringTrash ? '#ffcccb' : undefined,
+                          display: 'flex', alignItems: 'center', gap: '5px',
+                          fontWeight: 'bold', pointerEvents: 'none'
+                        }}
+                      >
+                        <span style={{ fontSize: '18px' }}>♻</span> Trash
+                      </Button>
+                    </div>
                   </div>
 
                   {/* Current Timeline View */}
                   <div id="timeline-board" style={{ flex: 1, overflow: 'auto', background: '#fff', position: 'relative' }} onPointerMove={handleTimelinePointerMove} onPointerUp={handleTimelinePointerUp}>
                     
-                    <div style={{ width: '10000px', height: '10000px', position: 'relative' }}>
+                    <div style={{ width: '10000px', height: '10000px', position: 'relative', transform: `scale(${timelineZoom})`, transformOrigin: 'top left' }}>
                       {/* SVG overlay for Timeline Connections */}
                       <svg style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 1, overflow: 'visible' }}>
                         {(timelines.find(t => t.id === currentTimelineId)?.connections || []).map((conn, idx) => {
