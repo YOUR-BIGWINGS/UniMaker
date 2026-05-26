@@ -8,7 +8,7 @@ import ms_sans_serif_bold from 'react95/dist/fonts/ms_sans_serif_bold.woff2';
 // ---------------------------------------------------------
 // APP VERSION - Easy to find in the codebase because I'm stupid
 // ---------------------------------------------------------
-export const APP_VERSION = 'VER 1.4.6';
+export const APP_VERSION = 'VER 1.4.7';
 
 const GlobalStyles = createGlobalStyle`
   @font-face {
@@ -162,7 +162,23 @@ function App() {
 
   const addNote = () => {
     const newId = Date.now();
-    setNotes([...notes, { id: newId, x: window.innerWidth / 2 - 125, y: window.innerHeight / 2 - 100, text: '', title: `Note ${newId.toString().slice(-4)}` }]);
+    const offset = (notes.length * 20) % 200; // Increment offset so they stack diagonally
+    
+    // Find the lowest available number for "Note X"
+    const usedNumbers = notes
+      .map(n => {
+        if (!n.title) return -1;
+        const match = n.title.match(/^Note (\d+)$/);
+        return match ? parseInt(match[1], 10) : -1;
+      })
+      .filter(n => n > 0);
+    
+    let nextNum = 1;
+    while (usedNumbers.includes(nextNum)) {
+      nextNum++;
+    }
+
+    setNotes([...notes, { id: newId, x: window.innerWidth / 2 - 125 + offset, y: window.innerHeight / 2 - 100 + offset, text: '', title: `Note ${nextNum}` }]);
   };
 
   const handlePointerDown = (e, id) => {
@@ -570,7 +586,7 @@ function App() {
                 <div style={{ cursor: activeTool === 'select' ? 'grab' : 'default' }}>
                   <WindowHeader className="window-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <input
-                      value={note.title || `Note ${note.id.toString().slice(-4)}`}
+                      value={note.title !== undefined ? note.title : `Note ${notes.length}`}
                       onChange={(e) => {
                          const newNotes = notes.map(n => n.id === note.id ? {...n, title: e.target.value} : n);
                          setNotes(newNotes);
