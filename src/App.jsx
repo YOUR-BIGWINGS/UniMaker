@@ -45,6 +45,11 @@ function App() {
   const [showWorkspacePage, setShowWorkspacePage] = useState(false);
   const [deleteMode, setDeleteMode] = useState(false);
   
+  // Cross-app links
+  const [appLinks, setAppLinks] = useState([]); // Array of { id: string, source: { type, id, ... }, target: { type, id, ... }, label: string }
+  const [linkModalMeta, setLinkModalMeta] = useState(null); // { entity: { type, id, contextId }, title: string }
+  const [linkSearchQuery, setLinkSearchQuery] = useState('');
+
   // Timeline state
   const [timelines, setTimelines] = useState([{ id: 1, name: 'Main Timeline', events: [], connections: [] }]);
   const [currentTimelineId, setCurrentTimelineId] = useState(1);
@@ -86,6 +91,9 @@ function App() {
           setTimelines(parsed.timelines);
           setCurrentTimelineId(parsed.timelines[0].id);
         }
+        if (parsed.appLinks) {
+          setAppLinks(parsed.appLinks);
+        }
       } catch (e) {
         console.error("Failed to parse saved data", e);
       }
@@ -93,12 +101,12 @@ function App() {
   }, []);
 
   const handleSaveToBrowser = () => {
-    localStorage.setItem('uniMakerSave', JSON.stringify({ workspaces, timelines }));
+    localStorage.setItem('uniMakerSave', JSON.stringify({ workspaces, timelines, appLinks }));
     alert('Successfully saved to browser storage!');
   };
 
   const handleSaveToFile = () => {
-    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify({ workspaces, timelines }, null, 2));
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify({ workspaces, timelines, appLinks }, null, 2));
     const downloadAnchorNode = document.createElement('a');
     downloadAnchorNode.setAttribute("href", dataStr);
     downloadAnchorNode.setAttribute("download", "unimaker_save.json");
@@ -202,6 +210,14 @@ function App() {
       setDraftLine({ startNoteId: id, endX: e.clientX, endY: e.clientY });
       e.target.setPointerCapture(e.pointerId);
       e.stopPropagation();
+    } else if (activeTool === 'clone') {
+      const noteToClone = notes.find((n) => n.id === id);
+      if (!noteToClone) return;
+
+      const newId = Date.now();
+      const newTitle = noteToClone.title ? `${noteToClone.title} (Clone)` : `Note ${notes.length + 1} (Clone)`;
+      setNotes([...notes, { ...noteToClone, id: newId, x: noteToClone.x + 30, y: noteToClone.y + 30, title: newTitle }]);
+      e.stopPropagation();
     }
   };
 
@@ -275,6 +291,47 @@ function App() {
     return { x: (ev.x || 0) + 125, y: (ev.y || 0) + 100 }; 
   };
 
+  const getAllLinkableTargets = () => {
+    const targets = [];
+    workspaces.forEach(w => {
+      targets.push({ type: 'workspace', id: w.id, label: `📁 Workspace: ${w.name}` });
+      w.notes.forEach(n => {
+        targets.push({ type: 'note', workspaceId: w.id, noteId: n.id, label: `📄 ${w.name} → ${n.title || 'Note'}` });
+      });
+    });
+    timelines.forEach(t => {
+      targets.push({ type: 'timeline', id: t.id, label: `◷ Timeline: ${t.name}` });
+      t.events.forEach(e => {
+        targets.push({ type: 'timestamp', timelineId: t.id, eventId: e.id, label: `⏱️ ${t.name} → ${e.timestamp || 'Event'}` });
+      });
+    });
+    return targets;
+  };
+
+  const navigateToLink = (target) => {
+    if (target.type === 'workspace') {
+      setCurrentWorkspaceId(target.id);
+      setShowTimelinePage(false);
+      setShowWorkspacePage(false);
+    } else if (target.type === 'note') {
+      setCurrentWorkspaceId(target.workspaceId);
+      setMaximizedNoteId(target.noteId);
+      setShowTimelinePage(false);
+      setShowWorkspacePage(false);
+    } else if (target.type === 'timeline') {
+      setCurrentTimelineId(target.id);
+      setShowTimelinePage(true);
+      setShowWorkspacePage(false);
+    } else if (target.type === 'timestamp') {
+      setCurrentTimelineId(target.timelineId);
+      setShowTimelinePage(true);
+      setShowWorkspacePage(false);
+      // Optional: focus or scroll to event
+    }
+  };
+
+  const currentEntityLinks = appLinks.filter(l => JSON.stringify(l.source) === JSON.stringify(linkModalMeta?.entity));
+
   const handleTimelinePointerDown = (e, id) => {
     if (activeTool === 'select' && (e.target.tagName.toLowerCase() === 'textarea' || e.target.tagName.toLowerCase() === 'input')) return;
 
@@ -302,6 +359,15 @@ function App() {
         endY: (e.clientY - parentRect.top + board.scrollTop) / timelineZoom 
       });
       e.target.setPointerCapture(e.pointerId);
+      e.stopPropagation();
+    } else if (activeTool === 'clone') {
+      const t = timelines.find(t => t.id === currentTimelineId);
+      if (!t) return;
+      const evToClone = t.events.find(ev => ev.id === id);
+      if (!evToClone) return;
+
+      const newEvent = { ...evToClone, id: Date.now(), x: (evToClone.x || 100) + 30, y: (evToClone.y || 100) + 30 };
+      setTimelines(prev => prev.map(tl => tl.id === currentTimelineId ? { ...tl, events: [...tl.events, newEvent] } : tl));
       e.stopPropagation();
     }
   };
@@ -497,6 +563,15 @@ function App() {
             >
               ✂
             </Button>
+            <Button 
+              className={activeTool === 'clone' ? 'active' : ''}
+              active={activeTool === 'clone'} 
+              onClick={() => setActiveTool('clone')} 
+              title="Clone Tool" 
+              style={{ width: '40px', height: '40px', fontSize: '20px' }}
+            >
+              ⧉
+            </Button>
             
             <div style={{ flex: 1 }} /> {/* Spacer */}
             
@@ -603,9 +678,20 @@ function App() {
                       }}
                       onPointerDown={(e) => e.stopPropagation()}
                     />
-                    <Button onClick={(e) => { e.stopPropagation(); setMaximizedNoteId(isMaximized ? null : note.id); }} style={{ width: 24, height: 24, minWidth: 0, padding: 0 }}>
-                      <span style={{ transform: isMaximized ? 'none' : 'none', display: 'inline-block' }}>🗖</span>
-                    </Button>
+                    <div style={{ display: 'flex', gap: '4px' }}>
+                      <Button onClick={(e) => {
+                        e.stopPropagation();
+                        setLinkModalMeta({
+                          entity: { type: 'note', workspaceId: currentWorkspaceId, noteId: note.id },
+                          title: `Note: ${note.title || 'Untitled'}`
+                        });
+                      }} style={{ width: 24, height: 24, minWidth: 0, padding: 0 }} title="Links">
+                        🔗
+                      </Button>
+                      <Button onClick={(e) => { e.stopPropagation(); setMaximizedNoteId(isMaximized ? null : note.id); }} style={{ width: 24, height: 24, minWidth: 0, padding: 0 }}>
+                        <span style={{ transform: isMaximized ? 'none' : 'none', display: 'inline-block' }}>🗖</span>
+                      </Button>
+                    </div>
                   </WindowHeader>
                 </div>
                 <WindowContent style={{ display: 'flex', flexDirection: 'column', flex: 1, padding: isMaximized ? '8px' : undefined }}>
@@ -667,6 +753,27 @@ function App() {
                           className={w.id === currentWorkspaceId ? 'active' : ''}
                           active={w.id === currentWorkspaceId} 
                           onClick={() => {
+                            if (activeTool === 'clone') {
+                              const wToClone = workspaces.find(ws => ws.id === w.id);
+                              if (!wToClone) return;
+                              const idMap = new Map();
+                              wToClone.notes.forEach((n, i) => {
+                                idMap.set(n.id, Date.now() + i + Math.random());
+                              });
+                              const newWs = {
+                                ...wToClone,
+                                id: Date.now(),
+                                name: `${wToClone.name} (Clone)`,
+                                notes: wToClone.notes.map(n => ({ ...n, id: idMap.get(n.id) })),
+                                connections: wToClone.connections.map(c => ({
+                                  ...c,
+                                  from: idMap.get(c.from),
+                                  to: idMap.get(c.to)
+                                }))
+                              };
+                              setWorkspaces([...workspaces, newWs]);
+                              return;
+                            }
                             if (deleteMode) {
                               if (window.confirm(`Are you sure you want to delete workspace "${w.name}"?`)) {
                                 const newWorkspaces = workspaces.filter(ws => ws.id !== w.id);
@@ -697,6 +804,18 @@ function App() {
                           placeholder="Rename Workspace..."
                           style={{ width: '150px' }}
                         />
+                        <Button 
+                          onClick={() => {
+                            setLinkModalMeta({
+                              entity: { type: 'workspace', id: w.id },
+                              title: `Workspace: ${w.name}`
+                            });
+                          }}
+                          style={{ minWidth: 0, padding: '0 8px' }}
+                          title="Links"
+                        >
+                          🔗
+                        </Button>
                       </div>
                     ))}
                   </div>
@@ -750,7 +869,30 @@ function App() {
                         <Button 
                           className={tl.id === currentTimelineId ? 'active' : ''}
                           active={tl.id === currentTimelineId} 
-                          onClick={() => setCurrentTimelineId(tl.id)} 
+                          onClick={() => {
+                            if (activeTool === 'clone') {
+                              const tToClone = timelines.find(t => t.id === tl.id);
+                              if (!tToClone) return;
+                              const idMap = new Map();
+                              tToClone.events.forEach((ev, i) => {
+                                idMap.set(ev.id, Date.now() + i + Math.random());
+                              });
+                              const newTl = {
+                                ...tToClone,
+                                id: Date.now(),
+                                name: `${tToClone.name} (Clone)`,
+                                events: tToClone.events.map(ev => ({ ...ev, id: idMap.get(ev.id) })),
+                                connections: (tToClone.connections || []).map(c => ({
+                                  ...c,
+                                  from: idMap.get(c.from),
+                                  to: idMap.get(c.to)
+                                }))
+                              };
+                              setTimelines([...timelines, newTl]);
+                              return;
+                            }
+                            setCurrentTimelineId(tl.id);
+                          }} 
                           style={{ minWidth: 'max-content' }}
                         >
                           {tl.name}
@@ -762,6 +904,18 @@ function App() {
                           }}
                           style={{ width: '100px', marginLeft: '5px' }}
                         />
+                        <Button 
+                          onClick={() => {
+                            setLinkModalMeta({
+                              entity: { type: 'timeline', id: tl.id },
+                              title: `Timeline: ${tl.name}`
+                            });
+                          }}
+                          style={{ minWidth: 0, padding: '0 8px', marginLeft: '5px' }}
+                          title="Links"
+                        >
+                          🔗
+                        </Button>
                       </div>
                     ))}
 
@@ -869,33 +1023,16 @@ function App() {
                               style={{ width: '100%', height: '100px', marginBottom: '8px', resize: 'none' }}
                             />
 
-                            <div style={{ display: 'flex', width: '100%', marginBottom: '8px', gap: '5px', alignItems: 'center' }}>
-                              <span style={{ fontSize: '12px' }}>Link:</span>
-                              <Select
-                                value={ev.workspaceId}
-                                options={workspaces.map(w => ({ value: w.id, label: w.name }))}
-                                onChange={(option) => {
-                                  setTimelines(prev => prev.map(t => t.id === currentTimelineId ? {
-                                    ...t, 
-                                    events: t.events.map(eObj => eObj.id === ev.id ? { ...eObj, workspaceId: option.value } : eObj)
-                                  } : t));
-                                }}
-                                menuMaxHeight={160}
-                                style={{ flex: 1, fontFamily: 'ms_sans_serif' }}
-                              />
-                            </div>
-
                             <Button 
                               onClick={() => {
-                                if (linkedWorkspace) {
-                                  setCurrentWorkspaceId(linkedWorkspace.id);
-                                  setShowTimelinePage(false);
-                                }
+                                setLinkModalMeta({
+                                  entity: { type: 'timestamp', timelineId: currentTimelineId, eventId: ev.id },
+                                  title: `Timestamp: ${ev.timestamp}`
+                                });
                               }}
-                              style={{ width: '100%', fontWeight: linkedWorkspace ? 'bold' : 'normal' }}
-                              disabled={!linkedWorkspace}
+                              style={{ width: '100%', fontWeight: 'bold' }}
                             >
-                              Go to {linkedWorkspace ? linkedWorkspace.name : 'Unknown Workspace'} 🔗
+                              🔗 Link Menu
                             </Button>
                           </div>
                         );
@@ -924,6 +1061,87 @@ function App() {
             </div>
           </Toolbar>
         </AppBar>
+
+        {/* Global Links Manager Modal */}
+        {linkModalMeta && (
+          <div style={{ position: 'absolute', top: 20, left: 20, right: 20, bottom: 20, zIndex: 155 }}>
+            <Window style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column' }}>
+              <WindowHeader style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span>Manage Links - {linkModalMeta.title}</span>
+                <Button onClick={() => { setLinkModalMeta(null); setLinkSearchQuery(''); }}>X</Button>
+              </WindowHeader>
+              <WindowContent style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <div style={{ display: 'flex', gap: '20px', height: '100%' }}>
+                  
+                  {/* Left Column: Existing Links */}
+                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', borderRight: '2px solid #848584', paddingRight: '20px', overflow: 'hidden' }}>
+                    <div style={{ marginBottom: '10px', fontWeight: 'bold' }}>Linked Items:</div>
+                    <div style={{ flex: 1, overflow: 'auto' }}>
+                      {currentEntityLinks.length === 0 ? (
+                        <div style={{ fontStyle: 'italic', marginTop: '5px' }}>No links configured.</div>
+                      ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                          {currentEntityLinks.map(link => (
+                            <div key={link.id} style={{ display: 'flex', gap: '5px', alignItems: 'center' }}>
+                              <Button style={{ flex: 1, textAlign: 'left', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} onClick={() => {
+                                navigateToLink(link.target);
+                                setLinkSearchQuery('');
+                                setLinkModalMeta(null);
+                              }}>
+                                {link.target.label} 🔗
+                              </Button>
+                              <Button onClick={() => setAppLinks(prev => prev.filter(l => l.id !== link.id))} title="Remove Link">
+                                ♻
+                              </Button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  
+                  {/* Right Column: Add New Link */}
+                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+                    <div style={{ marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <strong style={{ whiteSpace: 'nowrap' }}>Add New Link:</strong>
+                      <TextInput 
+                        placeholder="Search linkable items..." 
+                        value={linkSearchQuery} 
+                        onChange={(e) => setLinkSearchQuery(e.target.value)} 
+                        style={{ flex: 1 }}
+                      />
+                    </div>
+                    <div style={{ flex: 1, overflow: 'auto', paddingRight: '10px' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                        {getAllLinkableTargets()
+                          .filter(t => JSON.stringify({ type: t.type, id: t.id, workspaceId: t.workspaceId, noteId: t.noteId, timelineId: t.timelineId, eventId: t.eventId }) !== JSON.stringify(linkModalMeta.entity))
+                          .filter(t => t.label.toLowerCase().includes(linkSearchQuery.toLowerCase()))
+                          .map((t, idx) => (
+                            <Button 
+                              key={idx}
+                              style={{ textAlign: 'left', display: 'block', width: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                              onClick={() => {
+                                const newLink = {
+                                  id: Date.now(),
+                                  source: linkModalMeta.entity,
+                                  target: t
+                                };
+                                setAppLinks(prev => [...prev, newLink]);
+                              }}
+                            >
+                              + {t.label}
+                            </Button>
+                          ))
+                        }
+                      </div>
+                    </div>
+                  </div>
+
+                </div>
+              </WindowContent>
+            </Window>
+          </div>
+        )}
       </div>
     </ThemeProvider>
   );
