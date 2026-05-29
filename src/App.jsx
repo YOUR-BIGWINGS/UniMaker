@@ -8,7 +8,7 @@ import ms_sans_serif_bold from 'react95/dist/fonts/ms_sans_serif_bold.woff2';
 // ---------------------------------------------------------
 // APP VERSION - Easy to find in the codebase because I'm stupid
 // ---------------------------------------------------------
-export const APP_VERSION = 'VER 1.4.7';
+export const APP_VERSION = 'VER 1.4.9';
 
 const GlobalStyles = createGlobalStyle`
   @font-face {
@@ -85,11 +85,11 @@ function App() {
         const parsed = JSON.parse(savedData);
         if (parsed.workspaces && parsed.workspaces.length > 0) {
           setWorkspaces(parsed.workspaces);
-          setCurrentWorkspaceId(parsed.workspaces[0].id);
+          setCurrentWorkspaceId(parsed.currentWorkspaceId || parsed.workspaces[0].id);
         }
         if (parsed.timelines && parsed.timelines.length > 0) {
           setTimelines(parsed.timelines);
-          setCurrentTimelineId(parsed.timelines[0].id);
+          setCurrentTimelineId(parsed.currentTimelineId || parsed.timelines[0].id);
         }
         if (parsed.appLinks) {
           setAppLinks(parsed.appLinks);
@@ -101,12 +101,12 @@ function App() {
   }, []);
 
   const handleSaveToBrowser = () => {
-    localStorage.setItem('uniMakerSave', JSON.stringify({ workspaces, timelines, appLinks }));
+    localStorage.setItem('uniMakerSave', JSON.stringify({ workspaces, timelines, appLinks, currentWorkspaceId, currentTimelineId }));
     alert('Successfully saved to browser storage!');
   };
 
   const handleSaveToFile = () => {
-    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify({ workspaces, timelines, appLinks }, null, 2));
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify({ workspaces, timelines, appLinks, currentWorkspaceId, currentTimelineId }, null, 2));
     const downloadAnchorNode = document.createElement('a');
     downloadAnchorNode.setAttribute("href", dataStr);
     downloadAnchorNode.setAttribute("download", "unimaker_save.json");
@@ -124,11 +124,11 @@ function App() {
         const parsed = JSON.parse(event.target.result);
         if (parsed.workspaces && parsed.workspaces.length > 0) {
           setWorkspaces(parsed.workspaces);
-          setCurrentWorkspaceId(parsed.workspaces[0].id);
+          setCurrentWorkspaceId(parsed.currentWorkspaceId || parsed.workspaces[0].id);
         }
         if (parsed.timelines && parsed.timelines.length > 0) {
           setTimelines(parsed.timelines);
-          setCurrentTimelineId(parsed.timelines[0].id);
+          setCurrentTimelineId(parsed.currentTimelineId || parsed.timelines[0].id);
         }
         alert('Successfully loaded from file!');
       } catch (err) {
