@@ -848,13 +848,24 @@ function App() {
                         const currentTl = timelines.find(t => t.id === currentTimelineId);
                         if (!currentTl) return;
 
+                        let startX = 100 + (currentTl.events.length * 30);
+                        let startY = 100;
+                        const board = document.getElementById('timeline-board');
+                        if (board) {
+                          const rect = board.getBoundingClientRect();
+                          startX = (rect.width / 2 + board.scrollLeft) / timelineZoom;
+                          startY = (rect.height / 2 + board.scrollTop) / timelineZoom;
+                          startX += ((currentTl.events.length * 20) % 100) - 50;
+                          startY += ((currentTl.events.length * 20) % 100) - 50;
+                        }
+
                         const newEvent = {
                           id: Date.now() + 1,
                           timestamp: new Date().toLocaleTimeString(),
                           workspaceId: currentWorkspaceId,
                           text: '',
-                          x: 100 + (currentTl.events.length * 30),
-                          y: 100
+                          x: startX,
+                          y: startY
                         };
 
                         setTimelines(prev => prev.map(t => t.id === currentTimelineId ? { ...t, events: [...t.events, newEvent] } : t));
